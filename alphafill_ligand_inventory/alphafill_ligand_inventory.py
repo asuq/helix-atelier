@@ -19,7 +19,6 @@ import argparse
 import collections
 import csv
 import re
-import shlex
 import sys
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
@@ -270,13 +269,57 @@ def iter_cif_tokens(path: Path) -> Iterable[str]:
             i += 1
             continue
 
-        lexer = shlex.shlex(line, posix=True)
-        lexer.whitespace_split = True
-        lexer.commenters = "#"
-        for token in lexer:
+        for token in tokenise_cif_line(line, path, i + 1):
             yield token
 
         i += 1
+
+
+def tokenise_cif_line(line: str, path: Path, line_number: int) -> list[str]:
+    """
+    Tokenise one non-multiline CIF line.
+
+    CIF quotes delimit a value only when they begin a token. Apostrophes inside
+    bare values, such as ADENOSINE-5'-DIPHOSPHATE or atom names like C5', are
+    ordinary characters.
+    """
+    tokens: list[str] = []
+    i = 0
+    n_chars = len(line)
+
+    while i < n_chars:
+        while i < n_chars and line[i].isspace():
+            i += 1
+
+        if i >= n_chars or line[i] == "#":
+            break
+
+        if line[i] in {"'", '"'}:
+            quote = line[i]
+            i += 1
+            start = i
+            value_parts: list[str] = []
+
+            while i < n_chars:
+                if line[i] == quote and (i + 1 == n_chars or line[i + 1].isspace()):
+                    value_parts.append(line[start:i])
+                    i += 1
+                    break
+                i += 1
+            else:
+                raise AlphaFillInventoryError(
+                    f"{path}:{line_number}: quoted CIF value is missing closing {quote}"
+                )
+
+            tokens.append("".join(value_parts))
+            continue
+
+        start = i
+        while i < n_chars and not line[i].isspace():
+            i += 1
+        tokens.append(line[start:i])
+
+    return tokens
 
 
 def category_from_tag(tag: str) -> str:

@@ -226,3 +226,45 @@ HETATM C C1 F42 C 2 . C 102
     assert classes_by_comp == {"ABC": "CoM", "F42": "F420"}
     assert names_by_comp["ABC"] == "coenzyme M"
     assert names_by_comp["F42"] == "coenzyme F420\nreduced form"
+
+
+def test_unquoted_apostrophes_are_not_treated_as_quotes(tmp_path: Path) -> None:
+    cif = tmp_path / "mer" / "sample_model_0_alphafill.cif"
+    cif.parent.mkdir(parents=True)
+    cif.write_text(
+        f"""\
+data_sample
+#
+loop_
+_entity.id
+_entity.type
+_entity.pdbx_description
+1 polymer protein
+2 non-polymer ADENOSINE-5'-DIPHOSPHATE
+#
+loop_
+_struct_asym.id
+_struct_asym.entity_id
+A 1
+B 2
+#
+loop_
+_chem_comp.id
+_chem_comp.name
+ADP ADENOSINE-5'-DIPHOSPHATE
+#
+{ATOM_SITE_HEADER}ATOM C CA ALA A 1 1 A 1
+HETATM C C5' ADP B 2 . B 101
+HETATM O O3' ADP B 2 . B 101
+#
+""",
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    instances = inv.parse_ligand_instances_from_cif(cif)
+
+    assert len(instances) == 1
+    assert instances[0].ligand_comp_id == "ADP"
+    assert instances[0].ligand_name == "ADENOSINE-5'-DIPHOSPHATE"
+    assert instances[0].atom_count == 2
