@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "alphafill-ligand-inventory"
+version = "0.1.0"
+description = "Create ligand and cofactor inventory TSV files from AlphaFill mmCIF outputs."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+alphafill_ligand_inventory = "alphafill_ligand_inventory:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.setuptools]
+py-modules = ["alphafill_ligand_inventory"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
