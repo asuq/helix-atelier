@@ -1,0 +1,237 @@
+"""Tests for the FastANI species-separation visualiser."""
+
+from __future__ import annotations
+
+import importlib.util
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from unittest import mock
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+
+SCRIPT_PATH = Path(__file__).with_name("visualise_ani_matrix.py")
+EXPECTED_OUTPUTS = (
+    "ANI_matrix_heatmap.svg",
+    "ANI_matrix_heatmap.png",
+    "ANI_matrix_heatmap_simple.svg",
+    "ANI_matrix_heatmap_simple.png",
+)
+
+
+def load_visualiser_module():
+    """Load the visualiser as a module for focused helper tests."""
+    spec = importlib.util.spec_from_file_location("visualise_ani_matrix", SCRIPT_PATH)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Could not load {SCRIPT_PATH}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+VISUALISER = load_visualiser_module()
+
+
+def write_matrix(path: Path, rows: list[str]) -> None:
+    """Write an ASCII FastANI matrix fixture."""
+    path.write_text("\n".join(rows) + "\n", encoding="ascii")
+
+
+class VisualiseANIMatrixTests(unittest.TestCase):
+    """Verify ANI parsing, clustering, validation, and rendering."""
+
+    def test_parse_args_uses_species_separation_defaults(self) -> None:
+        args = VISUALISER.parse_args(["matrix.txt"])
+
+        self.assertEqual(args.lower_threshold, 90.0)
+        self.assertEqual(args.upper_threshold, 100.0)
+        self.assertEqual(args.species_threshold, 95.0)
+        self.assertEqual(args.colour_palette, "Blues")
+        self.assertEqual(args.linkage, "complete")
+
+    def test_parser_preserves_names_with_spaces_and_expands_na(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            matrix_path = Path(tempdir) / "fastani.matrix"
+            write_matrix(
+                matrix_path,
+                [
+                    "3",
+                    "Genome alpha",
+                    "Genome beta 96.2",
+                    "Genome gamma NA 94.5",
+                ],
+            )
+
+            names, matrix = VISUALISER.load_matrix(matrix_path)
+
+        self.assertEqual(names, ["Genome alpha", "Genome beta", "Genome gamma"])
+        self.assertEqual(matrix[0, 1], 96.2)
+        self.assertTrue(np.isnan(matrix[0, 2]))
+        self.assertEqual(matrix[1, 2], 94.5)
+        self.assertTrue(np.all(np.diag(matrix) == 100.0))
+
+    def test_missing_ani_is_maximum_clustering_distance(self) -> None:
+        matrix = np.array([[100.0, np.nan], [np.nan, 100.0]])
+
+        condensed = VISUALISER.build_distance_condensed(matrix)
+
+        np.testing.assert_array_equal(condensed, np.array([100.0]))
+
+    def test_missing_ani_uses_neutral_colour(self) -> None:
+        colour_map = VISUALISER.build_colormap("Blues")
+
+        np.testing.assert_allclose(
+            colour_map.get_bad(),
+            plt.matplotlib.colors.to_rgba("#bdbdbd"),
+        )
+
+    def test_threshold_validation_rejects_species_reference_outside_display(self) -> None:
+        with self.assertRaisesRegex(SystemExit, "must fall within"):
+            VISUALISER.validate_thresholds(96.0, 100.0, 95.0)
+
+    def test_threshold_validation_rejects_inverted_range(self) -> None:
+        with self.assertRaisesRegex(SystemExit, "must be smaller"):
+            VISUALISER.validate_thresholds(100.0, 90.0, 95.0)
+
+    def test_unknown_palette_is_rejected(self) -> None:
+        with self.assertRaisesRegex(SystemExit, "Unknown Matplotlib"):
+            VISUALISER.validate_colour_palette("not_a_palette")
+
+    def test_duplicate_samples_are_rejected(self) -> None:
+        self.assert_matrix_failure(
+            ["2", "Genome A", "Genome A 96.0"],
+            "Duplicate name",
+        )
+
+    def test_malformed_triangle_is_rejected(self) -> None:
+        self.assert_matrix_failure(
+            ["3", "A", "B 96.0", "C 94.0"],
+            "expected 2 values",
+        )
+
+    def test_non_numeric_value_is_rejected(self) -> None:
+        self.assert_matrix_failure(
+            ["2", "A", "B unknown"],
+            "Non-numeric/non-NA",
+        )
+
+    def test_out_of_range_value_is_rejected(self) -> None:
+        self.assert_matrix_failure(
+            ["2", "A", "B 101"],
+            "out of range",
+        )
+
+    def test_cluster_order_is_deterministic_for_unsorted_names(self) -> None:
+        names = ["C", "A", "B"]
+        matrix = np.array(
+            [
+                [100.0, 92.0, 91.0],
+                [92.0, 100.0, 98.0],
+                [91.0, 98.0, 100.0],
+            ]
+        )
+
+        first_order, _ = VISUALISER.calculate_cluster_order(names, matrix, "complete")
+        second_order, _ = VISUALISER.calculate_cluster_order(names, matrix, "complete")
+
+        self.assertEqual(first_order, second_order)
+
+    def test_clustered_render_defaults_to_complete_linkage(self) -> None:
+        names = ["A", "B", "C"]
+        matrix = np.array(
+            [
+                [100.0, 98.0, 91.0],
+                [98.0, 100.0, 92.0],
+                [91.0, 92.0, 100.0],
+            ]
+        )
+        with tempfile.TemporaryDirectory() as tempdir, mock.patch.object(
+            VISUALISER,
+            "linkage",
+            wraps=VISUALISER.linkage,
+        ) as linkage_mock:
+            VISUALISER.render_clustered_figure(
+                names,
+                matrix,
+                Path(tempdir) / "clustered.svg",
+                90.0,
+                100.0,
+                95.0,
+                "Blues",
+            )
+
+        self.assertEqual(linkage_mock.call_args.kwargs["method"], "complete")
+
+    def test_clustered_render_accepts_average_linkage(self) -> None:
+        names = ["A", "B", "C"]
+        matrix = np.array(
+            [
+                [100.0, 98.0, 91.0],
+                [98.0, 100.0, 92.0],
+                [91.0, 92.0, 100.0],
+            ]
+        )
+        with tempfile.TemporaryDirectory() as tempdir, mock.patch.object(
+            VISUALISER,
+            "linkage",
+            wraps=VISUALISER.linkage,
+        ) as linkage_mock:
+            VISUALISER.render_clustered_figure(
+                names,
+                matrix,
+                Path(tempdir) / "clustered.svg",
+                90.0,
+                100.0,
+                95.0,
+                "Blues",
+                "average",
+            )
+
+        self.assertEqual(linkage_mock.call_args.kwargs["method"], "average")
+
+    def test_cli_writes_all_outputs_and_marks_species_reference(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp_path = Path(tempdir)
+            matrix_path = temp_path / "fastani.matrix"
+            write_matrix(
+                matrix_path,
+                [
+                    "3",
+                    "Genome A",
+                    "Genome B 97.5",
+                    "Genome C NA 93.0",
+                ],
+            )
+
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT_PATH), str(matrix_path)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            for filename in EXPECTED_OUTPUTS:
+                output_path = temp_path / filename
+                self.assertTrue(output_path.is_file(), msg=f"Missing {output_path}")
+                self.assertGreater(output_path.stat().st_size, 0)
+            clustered_svg = (temp_path / EXPECTED_OUTPUTS[0]).read_text(encoding="utf-8")
+            self.assertIn("95% species", clustered_svg)
+            self.assertIn("95% ANI", clustered_svg)
+            self.assertIn("Genome A", clustered_svg)
+
+    def assert_matrix_failure(self, rows: list[str], expected_error: str) -> None:
+        """Assert that malformed matrix input fails with an actionable message."""
+        with tempfile.TemporaryDirectory() as tempdir:
+            matrix_path = Path(tempdir) / "fastani.matrix"
+            write_matrix(matrix_path, rows)
+            with self.assertRaisesRegex(SystemExit, expected_error):
+                VISUALISER.load_matrix(matrix_path)
+
+
+if __name__ == "__main__":
+    unittest.main()
