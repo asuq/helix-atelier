@@ -140,6 +140,49 @@ class VisualiseANIMatrixTests(unittest.TestCase):
 
         self.assertEqual(first_order, second_order)
 
+    def test_clustered_layout_places_dendrograms_flush_with_matrix(self) -> None:
+        layout = VISUALISER.derive_clustered_layout(["A", "B", "C"])
+
+        self.assertAlmostEqual(
+            layout["top_axis_bottom"],
+            layout["matrix_bottom"] + layout["matrix_height"],
+        )
+        self.assertAlmostEqual(layout["top_axis_left"], layout["matrix_left"])
+        self.assertAlmostEqual(layout["top_axis_width"], layout["matrix_width"])
+        self.assertAlmostEqual(
+            layout["left_axis_left"] + layout["left_axis_width"],
+            layout["matrix_left"],
+        )
+        self.assertAlmostEqual(layout["left_axis_bottom"], layout["matrix_bottom"])
+        self.assertAlmostEqual(layout["left_axis_height"], layout["matrix_height"])
+
+    def test_large_na_matrix_renders_with_aligned_unlabelled_layout(self) -> None:
+        sample_count = 24
+        names = [f"sample_{index:02d}" for index in range(sample_count)]
+        matrix = np.full((sample_count, sample_count), 92.0)
+        np.fill_diagonal(matrix, 100.0)
+        matrix[:12, :12] = 97.0
+        matrix[12:, 12:] = 96.0
+        np.fill_diagonal(matrix, 100.0)
+        matrix[0, 23] = np.nan
+        matrix[23, 0] = np.nan
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            output_path = Path(tempdir) / "large.svg"
+            VISUALISER.render_clustered_figure(
+                names,
+                matrix,
+                output_path,
+                90.0,
+                100.0,
+                95.0,
+                "Blues",
+            )
+            svg_text = output_path.read_text(encoding="utf-8")
+
+        self.assertNotIn("sample_00", svg_text)
+        self.assertIn("95% ANI", svg_text)
+
     def test_clustered_render_defaults_to_complete_linkage(self) -> None:
         names = ["A", "B", "C"]
         matrix = np.array(

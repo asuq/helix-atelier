@@ -257,6 +257,73 @@ def derive_label_size(sample_count: int) -> float:
     return 6.0
 
 
+def derive_clustered_layout(names: list[str]) -> dict[str, float]:
+    """Return exact clustered figure and axis geometry in figure fractions."""
+    sample_count = len(names)
+    base_size = derive_figure_size(sample_count)
+    left_outer_in = max(0.12, min(0.2, base_size * 0.012))
+    top_outer_in = max(0.1, min(0.16, base_size * 0.01))
+    legend_width_in = max(1.0, min(1.4, base_size * 0.09))
+    legend_height_in = max(1.2, min(1.7, base_size * 0.105))
+    left_dendrogram_width_in = max(0.55, min(0.9, base_size * 0.055))
+    top_dendrogram_height_in = max(0.65, min(1.1, base_size * 0.07))
+    left_column_width_in = max(legend_width_in, left_dendrogram_width_in)
+    top_band_height_in = max(legend_height_in, top_dendrogram_height_in)
+
+    if sample_count <= MAX_LABELLED_SAMPLES:
+        label_size = derive_label_size(sample_count)
+        longest_label = max(len(name) for name in names)
+        label_margin_in = min(
+            4.0,
+            max(0.55, longest_label * label_size * 0.62 / 72.0 + 0.25),
+        )
+    else:
+        label_margin_in = 0.14
+
+    left_content_in = left_outer_in + left_column_width_in
+    top_content_in = top_outer_in + top_band_height_in
+    matrix_side_in = min(
+        base_size - left_content_in - label_margin_in,
+        base_size - top_content_in - label_margin_in,
+    )
+    if matrix_side_in <= 0:
+        raise ValueError("Clustered figure layout leaves no space for the ANI matrix.")
+
+    figure_width_in = left_content_in + matrix_side_in + label_margin_in
+    figure_height_in = top_content_in + matrix_side_in + label_margin_in
+    matrix_left_in = left_content_in
+    matrix_bottom_in = label_margin_in
+    matrix_left = matrix_left_in / figure_width_in
+    matrix_bottom = matrix_bottom_in / figure_height_in
+    matrix_width = matrix_side_in / figure_width_in
+    matrix_height = matrix_side_in / figure_height_in
+
+    return {
+        "figure_width_in": figure_width_in,
+        "figure_height_in": figure_height_in,
+        "matrix_left": matrix_left,
+        "matrix_bottom": matrix_bottom,
+        "matrix_width": matrix_width,
+        "matrix_height": matrix_height,
+        "top_axis_left": matrix_left,
+        "top_axis_bottom": (matrix_bottom_in + matrix_side_in) / figure_height_in,
+        "top_axis_width": matrix_width,
+        "top_axis_height": top_dendrogram_height_in / figure_height_in,
+        "left_axis_left": (
+            matrix_left_in - left_dendrogram_width_in
+        ) / figure_width_in,
+        "left_axis_bottom": matrix_bottom,
+        "left_axis_width": left_dendrogram_width_in / figure_width_in,
+        "left_axis_height": matrix_height,
+        "legend_left": left_outer_in / figure_width_in,
+        "legend_bottom": (
+            matrix_bottom_in + matrix_side_in + top_band_height_in - legend_height_in
+        ) / figure_height_in,
+        "legend_width": legend_width_in / figure_width_in,
+        "legend_height": legend_height_in / figure_height_in,
+    }
+
+
 def get_heatmap_extent(sample_count: int) -> tuple[float, float, float, float]:
     """Return image bounds that centre samples on integer coordinates."""
     return (-0.5, sample_count - 0.5, sample_count - 0.5, -0.5)
@@ -423,13 +490,14 @@ def draw_dendrogram(
         axis.set_ylim(0, displayed_max)
         axis.axhline(species_distance, color="#b2182b", linewidth=0.9)
         axis.text(
-            right,
+            0.995,
             species_distance,
-            f" {species_threshold:g}% ANI",
+            f"{species_threshold:g}% ANI",
             ha="right",
             va="bottom",
             fontsize=6,
             color="#303030",
+            transform=axis.get_yaxis_transform(),
         )
     elif orientation == "left":
         axis.set_xlim(displayed_max, 0)
@@ -437,13 +505,14 @@ def draw_dendrogram(
         axis.axvline(species_distance, color="#b2182b", linewidth=0.9)
         axis.text(
             species_distance,
-            top,
-            f"{species_threshold:g}% ANI ",
+            0.995,
+            f"{species_threshold:g}% ANI",
             ha="left",
             va="top",
             rotation=90,
             fontsize=6,
             color="#303030",
+            transform=axis.get_xaxis_transform(),
         )
     for spine in axis.spines.values():
         spine.set_visible(False)
@@ -468,24 +537,42 @@ def render_clustered_figure(
     order, dendrogram_info = calculate_cluster_order(names, matrix_values, linkage_method)
     ordered_names = [names[index] for index in order]
     ordered_matrix = matrix_values[np.ix_(order, order)]
-    figure_size = derive_figure_size(len(names))
-    figure = plt.figure(figsize=(figure_size, figure_size))
-    grid = GridSpec(
-        2,
-        3,
-        width_ratios=[1.5, 0.8, 12],
-        height_ratios=[1.5, 12],
-        wspace=0.02,
-        hspace=0.02,
-        left=0.03,
-        right=0.94 if len(names) <= MAX_LABELLED_SAMPLES else 0.99,
-        bottom=0.08 if len(names) <= MAX_LABELLED_SAMPLES else 0.03,
-        top=0.99,
+    layout = derive_clustered_layout(ordered_names)
+    figure = plt.figure(
+        figsize=(layout["figure_width_in"], layout["figure_height_in"]),
     )
-    legend_axis = figure.add_subplot(grid[0, 0])
-    matrix_axis = figure.add_subplot(grid[1, 2])
-    top_axis = figure.add_subplot(grid[0, 2])
-    left_axis = figure.add_subplot(grid[1, 1])
+    legend_axis = figure.add_axes(
+        [
+            layout["legend_left"],
+            layout["legend_bottom"],
+            layout["legend_width"],
+            layout["legend_height"],
+        ]
+    )
+    matrix_axis = figure.add_axes(
+        [
+            layout["matrix_left"],
+            layout["matrix_bottom"],
+            layout["matrix_width"],
+            layout["matrix_height"],
+        ]
+    )
+    top_axis = figure.add_axes(
+        [
+            layout["top_axis_left"],
+            layout["top_axis_bottom"],
+            layout["top_axis_width"],
+            layout["top_axis_height"],
+        ]
+    )
+    left_axis = figure.add_axes(
+        [
+            layout["left_axis_left"],
+            layout["left_axis_bottom"],
+            layout["left_axis_width"],
+            layout["left_axis_height"],
+        ]
+    )
 
     draw_legend(
         legend_axis,
@@ -517,13 +604,7 @@ def render_clustered_figure(
         species_threshold,
         "left",
     )
-    figure.savefig(
-        output_path,
-        dpi=300,
-        facecolor="white",
-        bbox_inches="tight",
-        pad_inches=0.1,
-    )
+    figure.savefig(output_path, dpi=300, facecolor="white")
     plt.close(figure)
 
 
