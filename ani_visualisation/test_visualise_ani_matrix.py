@@ -47,7 +47,7 @@ class VisualiseANIMatrixTests(unittest.TestCase):
     def test_parse_args_uses_species_separation_defaults(self) -> None:
         args = VISUALISER.parse_args(["matrix.txt"])
 
-        self.assertEqual(args.lower_threshold, 90.0)
+        self.assertEqual(args.lower_threshold, 80.0)
         self.assertEqual(args.upper_threshold, 100.0)
         self.assertEqual(args.species_threshold, 95.0)
         self.assertEqual(args.colour_palette, "Blues")
@@ -263,6 +263,9 @@ class VisualiseANIMatrixTests(unittest.TestCase):
                 self.assertTrue(output_path.is_file(), msg=f"Missing {output_path}")
                 self.assertGreater(output_path.stat().st_size, 0)
             clustered_svg = (temp_path / EXPECTED_OUTPUTS[0]).read_text(encoding="utf-8")
+            self.assertIn(">80<", clustered_svg)
+            self.assertIn(">95<", clustered_svg)
+            self.assertIn(">100<", clustered_svg)
             self.assertIn("95% species", clustered_svg)
             self.assertIn("95% ANI", clustered_svg)
             self.assertIn("Genome A", clustered_svg)

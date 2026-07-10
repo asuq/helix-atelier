@@ -22,7 +22,7 @@ from scipy.cluster.hierarchy import dendrogram, linkage
 from scipy.spatial.distance import squareform
 
 
-DEFAULT_LOWER_THRESHOLD = 90.0
+DEFAULT_LOWER_THRESHOLD = 80.0
 DEFAULT_UPPER_THRESHOLD = 100.0
 DEFAULT_SPECIES_THRESHOLD = 95.0
 DEFAULT_COLOUR_PALETTE = "Blues"
@@ -59,7 +59,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--lower-threshold",
         type=float,
         default=DEFAULT_LOWER_THRESHOLD,
-        help="Lower heatmap colour limit. Default: 90.",
+        help="Lower heatmap colour limit. Default: 80.",
     )
     parser.add_argument(
         "--upper-threshold",
