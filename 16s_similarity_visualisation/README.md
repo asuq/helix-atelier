@@ -80,8 +80,10 @@ For `--out-prefix results/16S_similarity`, the script writes:
 - `16S_similarity.heatmap.pdf`: clustered heatmap in the selected format.
 
 Threshold comparisons use unrounded values and are strictly below (`<`) the
-selected value. Diagonal cells are never highlighted. Summary logs count unique
-unordered biological pairs and directed matrix cells separately.
+selected value. The cell grid is always black; when values are annotated,
+below-threshold off-diagonal values are red. Diagonal values remain black.
+Summary logs count unique unordered biological pairs and directed matrix cells
+separately.
 
 ## Tests
 

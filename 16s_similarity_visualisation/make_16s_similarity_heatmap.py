@@ -498,17 +498,18 @@ def render_heatmap(
         heatmap_axis.set_xlim(-0.5, taxon_count - 0.5)
         heatmap_axis.set_ylim(taxon_count - 0.5, -0.5)
 
-        for row_index, column_index in np.argwhere(ordered_below):
-            heatmap_axis.add_patch(
-                Rectangle(
-                    (column_index - 0.5, row_index - 0.5),
-                    1.0,
-                    1.0,
-                    fill=False,
-                    edgecolor="red",
-                    linewidth=0.55,
+        for row_index in range(taxon_count):
+            for column_index in range(taxon_count):
+                heatmap_axis.add_patch(
+                    Rectangle(
+                        (column_index - 0.5, row_index - 0.5),
+                        1.0,
+                        1.0,
+                        fill=False,
+                        edgecolor="black",
+                        linewidth=0.35,
+                    )
                 )
-            )
 
         if should_annotate(annotate_mode, taxon_count):
             annotation_size = max(2.5, min(7.0, 9.0 - taxon_count * 0.15))
@@ -537,13 +538,13 @@ def render_heatmap(
             0.5,
             0.015,
             (
-                f"Red outline: below {threshold:g}% 16S rRNA gene sequence "
-                "similarity threshold"
+                f"Black grid; values below {threshold:g}% 16S rRNA gene sequence "
+                "similarity are red when annotated"
             ),
             ha="center",
             va="bottom",
             fontsize=9,
-            color="red",
+            color="black",
         )
         figure.savefig(output_path, dpi=dpi, bbox_inches="tight")
     finally:

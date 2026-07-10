@@ -318,11 +318,11 @@ def test_outputs_have_requested_schemas_and_directed_rows(
     assert len(pairwise) == 6
     assert not (pairwise["taxon1"] == pairwise["taxon2"]).any()
     svg = paths.heatmap.read_text(encoding="utf-8")
-    assert "Red outline: below 98.65%" in svg
+    assert "Black grid; values below 98.65%" in svg
     assert "16S rRNA gene sequence similarity (%)" in svg
 
 
-def test_render_draws_threshold_outlines_but_not_diagonal(
+def test_render_draws_an_always_black_grid(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     similarity = np.array([[100.0, 97.0], [97.0, 100.0]])
@@ -349,12 +349,16 @@ def test_render_draws_threshold_outlines_but_not_diagonal(
         None,
     )
 
-    red_rectangles = [
+    cell_rectangles = [
         patch
         for patch in recorded_rectangles
-        if isinstance(patch, TOOL.Rectangle) and patch.get_edgecolor() == (1.0, 0.0, 0.0, 1.0)
+        if isinstance(patch, TOOL.Rectangle)
     ]
-    assert len(red_rectangles) == 2
+    assert len(cell_rectangles) == 4
+    assert all(
+        patch.get_edgecolor() == (0.0, 0.0, 0.0, 1.0)
+        for patch in cell_rectangles
+    )
 
 
 def test_cli_reports_missing_input(tmp_path: Path) -> None:
