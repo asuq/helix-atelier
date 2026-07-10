@@ -18,6 +18,8 @@ SCRIPT_PATH = Path(__file__).with_name("visualise_ani_matrix.py")
 EXPECTED_OUTPUTS = (
     "ANI_matrix_heatmap.svg",
     "ANI_matrix_heatmap.png",
+)
+REMOVED_SIMPLE_OUTPUTS = (
     "ANI_matrix_heatmap_simple.svg",
     "ANI_matrix_heatmap_simple.png",
 )
@@ -306,6 +308,8 @@ class VisualiseANIMatrixTests(unittest.TestCase):
                 output_path = temp_path / filename
                 self.assertTrue(output_path.is_file(), msg=f"Missing {output_path}")
                 self.assertGreater(output_path.stat().st_size, 0)
+            for filename in REMOVED_SIMPLE_OUTPUTS:
+                self.assertFalse((temp_path / filename).exists())
             clustered_svg = (temp_path / EXPECTED_OUTPUTS[0]).read_text(encoding="utf-8")
             self.assertIn(">75<", clustered_svg)
             self.assertIn(">95<", clustered_svg)

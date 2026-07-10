@@ -16,7 +16,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import colors
 from matplotlib.collections import LineCollection
-from matplotlib.gridspec import GridSpec
 from matplotlib.patches import Rectangle
 from scipy.cluster.hierarchy import dendrogram, linkage
 from scipy.spatial.distance import squareform
@@ -32,8 +31,6 @@ MISSING_COLOUR = "#bdbdbd"
 OUTPUT_FILENAMES = (
     "ANI_matrix_heatmap.svg",
     "ANI_matrix_heatmap.png",
-    "ANI_matrix_heatmap_simple.svg",
-    "ANI_matrix_heatmap_simple.png",
 )
 
 
@@ -292,12 +289,9 @@ def build_colormap(colour_palette: str) -> colors.Colormap:
     return plt.get_cmap(colour_palette).with_extremes(bad=MISSING_COLOUR)
 
 
-def derive_figure_size(sample_count: int, simple: bool = False) -> float:
+def derive_figure_size(sample_count: int) -> float:
     """Choose a bounded square figure size for the matrix density."""
-    base = 8.0 if simple else 10.0
-    maximum = 32.0 if simple else 40.0
-    scale = 0.025 if simple else 0.03
-    return max(base, min(maximum, base + sample_count * scale))
+    return max(10.0, min(40.0, 10.0 + sample_count * 0.03))
 
 
 def derive_label_size(sample_count: int) -> float:
@@ -658,52 +652,6 @@ def render_clustered_figure(
     plt.close(figure)
 
 
-def render_simple_figure(
-    names: list[str],
-    matrix_values: np.ndarray,
-    output_path: Path,
-    lower_threshold: float,
-    upper_threshold: float,
-    species_threshold: float,
-    colour_palette: str,
-) -> None:
-    """Render the matrix in its original order without dendrograms or labels."""
-    colour_map = build_colormap(colour_palette)
-    normaliser = colors.Normalize(lower_threshold, upper_threshold, clip=True)
-    figure_size = derive_figure_size(len(names), simple=True)
-    figure = plt.figure(figsize=(figure_size, figure_size))
-    grid = GridSpec(
-        1,
-        2,
-        width_ratios=[1.8, 12],
-        wspace=0.04,
-        left=0.04,
-        right=0.99,
-        bottom=0.04,
-        top=0.99,
-    )
-    legend_axis = figure.add_subplot(grid[0, 0])
-    matrix_axis = figure.add_subplot(grid[0, 1])
-    draw_legend(
-        legend_axis,
-        colour_map,
-        lower_threshold,
-        upper_threshold,
-        species_threshold,
-    )
-    draw_matrix(
-        matrix_axis,
-        matrix_values,
-        names,
-        colour_map,
-        normaliser,
-        show_labels=False,
-        row_labels_right=False,
-    )
-    figure.savefig(output_path, dpi=300, facecolor="white")
-    plt.close(figure)
-
-
 def write_outputs(
     names: list[str],
     matrix_values: np.ndarray,
@@ -714,9 +662,9 @@ def write_outputs(
     colour_palette: str,
     linkage_method: str,
 ) -> None:
-    """Write clustered and simple SVG/PNG figures beside the input matrix."""
+    """Write clustered SVG and PNG figures beside the input matrix."""
     output_paths = [matrix_path.parent / filename for filename in OUTPUT_FILENAMES]
-    for output_path in output_paths[:2]:
+    for output_path in output_paths:
         render_clustered_figure(
             names,
             matrix_values,
@@ -726,16 +674,6 @@ def write_outputs(
             species_threshold,
             colour_palette,
             linkage_method,
-        )
-    for output_path in output_paths[2:]:
-        render_simple_figure(
-            names,
-            matrix_values,
-            output_path,
-            lower_threshold,
-            upper_threshold,
-            species_threshold,
-            colour_palette,
         )
     for output_path in output_paths:
         print(f"Wrote {output_path}")
