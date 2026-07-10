@@ -47,11 +47,55 @@ class VisualiseANIMatrixTests(unittest.TestCase):
     def test_parse_args_uses_species_separation_defaults(self) -> None:
         args = VISUALISER.parse_args(["matrix.txt"])
 
-        self.assertEqual(args.lower_threshold, 80.0)
+        self.assertIsNone(args.lower_threshold)
+        self.assertEqual(args.lower_threshold_mode, "static")
         self.assertEqual(args.upper_threshold, 100.0)
         self.assertEqual(args.species_threshold, 95.0)
         self.assertEqual(args.colour_palette, "Blues")
         self.assertEqual(args.linkage, "complete")
+
+    def test_static_mode_resolves_default_and_explicit_thresholds(self) -> None:
+        matrix = np.array([[100.0, 92.5], [92.5, 100.0]])
+
+        self.assertEqual(
+            VISUALISER.resolve_lower_threshold(matrix, "static", None),
+            75.0,
+        )
+        self.assertEqual(
+            VISUALISER.resolve_lower_threshold(matrix, "static", 90.0),
+            90.0,
+        )
+
+    def test_dynamic_mode_floors_lowest_finite_pairwise_ani(self) -> None:
+        matrix = np.array(
+            [
+                [100.0, 75.859894, np.nan],
+                [75.859894, 100.0, 93.2],
+                [np.nan, 93.2, 100.0],
+            ]
+        )
+
+        threshold = VISUALISER.resolve_lower_threshold(matrix, "dynamic", None)
+
+        self.assertEqual(threshold, 75.0)
+
+    def test_dynamic_mode_rejects_matrix_without_finite_pairs(self) -> None:
+        matrix = np.array([[100.0, np.nan], [np.nan, 100.0]])
+
+        with self.assertRaisesRegex(SystemExit, "no finite off-diagonal ANI"):
+            VISUALISER.resolve_lower_threshold(matrix, "dynamic", None)
+
+    def test_dynamic_mode_rejects_explicit_lower_threshold(self) -> None:
+        with self.assertRaisesRegex(SystemExit, "cannot be combined"):
+            VISUALISER.parse_args(
+                [
+                    "--lower-threshold-mode",
+                    "dynamic",
+                    "--lower-threshold",
+                    "80",
+                    "matrix.txt",
+                ]
+            )
 
     def test_parser_preserves_names_with_spaces_and_expands_na(self) -> None:
         with tempfile.TemporaryDirectory() as tempdir:
@@ -263,12 +307,45 @@ class VisualiseANIMatrixTests(unittest.TestCase):
                 self.assertTrue(output_path.is_file(), msg=f"Missing {output_path}")
                 self.assertGreater(output_path.stat().st_size, 0)
             clustered_svg = (temp_path / EXPECTED_OUTPUTS[0]).read_text(encoding="utf-8")
-            self.assertIn(">80<", clustered_svg)
+            self.assertIn(">75<", clustered_svg)
             self.assertIn(">95<", clustered_svg)
             self.assertIn(">100<", clustered_svg)
             self.assertIn("95% species", clustered_svg)
             self.assertIn("95% ANI", clustered_svg)
             self.assertIn("Genome A", clustered_svg)
+            self.assertIn("75% (static mode)", result.stdout)
+
+    def test_cli_dynamic_mode_uses_matrix_minimum(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp_path = Path(tempdir)
+            matrix_path = temp_path / "fastani.matrix"
+            write_matrix(
+                matrix_path,
+                [
+                    "3",
+                    "Genome A",
+                    "Genome B 97.5",
+                    "Genome C NA 93.2",
+                ],
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT_PATH),
+                    "--lower-threshold-mode",
+                    "dynamic",
+                    str(matrix_path),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            clustered_svg = (temp_path / EXPECTED_OUTPUTS[0]).read_text(encoding="utf-8")
+            self.assertIn(">93<", clustered_svg)
+            self.assertIn("93% (dynamic mode)", result.stdout)
 
     def assert_matrix_failure(self, rows: list[str], expected_error: str) -> None:
         """Assert that malformed matrix input fails with an actionable message."""

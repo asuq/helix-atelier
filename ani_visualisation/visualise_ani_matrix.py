@@ -22,7 +22,7 @@ from scipy.cluster.hierarchy import dendrogram, linkage
 from scipy.spatial.distance import squareform
 
 
-DEFAULT_LOWER_THRESHOLD = 80.0
+DEFAULT_LOWER_THRESHOLD = 75.0
 DEFAULT_UPPER_THRESHOLD = 100.0
 DEFAULT_SPECIES_THRESHOLD = 95.0
 DEFAULT_COLOUR_PALETTE = "Blues"
@@ -58,8 +58,20 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--lower-threshold",
         type=float,
-        default=DEFAULT_LOWER_THRESHOLD,
-        help="Lower heatmap colour limit. Default: 80.",
+        default=None,
+        help=(
+            "Lower heatmap colour limit in static mode. "
+            "Default in static mode: 75."
+        ),
+    )
+    parser.add_argument(
+        "--lower-threshold-mode",
+        choices=["static", "dynamic"],
+        default="static",
+        help=(
+            "Use the static lower threshold or floor the lowest finite pairwise "
+            "ANI in the input matrix. Default: static."
+        ),
     )
     parser.add_argument(
         "--upper-threshold",
@@ -90,19 +102,47 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     args = parser.parse_args(argv)
-    validate_thresholds(
-        args.lower_threshold,
-        args.upper_threshold,
-        args.species_threshold,
-    )
+    if args.lower_threshold_mode == "dynamic" and args.lower_threshold is not None:
+        die(
+            "--lower-threshold cannot be combined with "
+            "--lower-threshold-mode dynamic."
+        )
     validate_colour_palette(args.colour_palette)
     return args
+
+
+def resolve_lower_threshold(
+    matrix_values: np.ndarray,
+    lower_threshold_mode: str,
+    lower_threshold: float | None,
+) -> float:
+    """Resolve the static or matrix-derived lower heatmap threshold."""
+    if lower_threshold_mode == "static":
+        return DEFAULT_LOWER_THRESHOLD if lower_threshold is None else lower_threshold
+    if lower_threshold_mode != "dynamic":
+        raise ValueError(f"Unsupported lower-threshold mode: {lower_threshold_mode}")
+    if lower_threshold is not None:
+        die(
+            "--lower-threshold cannot be combined with "
+            "--lower-threshold-mode dynamic."
+        )
+
+    finite_pairwise = np.isfinite(matrix_values)
+    np.fill_diagonal(finite_pairwise, False)
+    observed_values = matrix_values[finite_pairwise]
+    if observed_values.size == 0:
+        die(
+            "Cannot derive a dynamic lower threshold because the matrix contains "
+            "no finite off-diagonal ANI values. Use static mode instead."
+        )
+    return float(np.floor(np.min(observed_values)))
 
 
 def validate_thresholds(
     lower_threshold: float,
     upper_threshold: float,
     species_threshold: float,
+    lower_threshold_mode: str | None = None,
 ) -> None:
     """Validate the heatmap range and species-reference threshold."""
     values = {
@@ -114,15 +154,25 @@ def validate_thresholds(
         if not np.isfinite(value) or not 0 <= value <= 100:
             die(f"{label} must be within [0,100], got: {value}")
     if lower_threshold >= upper_threshold:
+        mode_hint = (
+            " Use static mode or adjust --upper-threshold."
+            if lower_threshold_mode == "dynamic"
+            else ""
+        )
         die(
             "Lower threshold must be smaller than upper threshold, "
-            f"got: {lower_threshold} >= {upper_threshold}"
+            f"got: {lower_threshold} >= {upper_threshold}.{mode_hint}"
         )
     if not lower_threshold <= species_threshold <= upper_threshold:
+        mode_hint = (
+            " Use static mode or adjust --species-threshold/--upper-threshold."
+            if lower_threshold_mode == "dynamic"
+            else ""
+        )
         die(
             "Species threshold must fall within the displayed heatmap range, "
             f"got: {species_threshold} outside "
-            f"[{lower_threshold},{upper_threshold}]"
+            f"[{lower_threshold},{upper_threshold}].{mode_hint}"
         )
 
 
@@ -696,11 +746,26 @@ def main(argv: list[str] | None = None) -> int:
     matplotlib.rcParams["svg.fonttype"] = "none"
     args = parse_args(argv)
     names, matrix_values = load_matrix(args.matrix_path)
+    lower_threshold = resolve_lower_threshold(
+        matrix_values,
+        args.lower_threshold_mode,
+        args.lower_threshold,
+    )
+    validate_thresholds(
+        lower_threshold,
+        args.upper_threshold,
+        args.species_threshold,
+        args.lower_threshold_mode,
+    )
+    print(
+        f"Using lower heatmap threshold {lower_threshold:g}% "
+        f"({args.lower_threshold_mode} mode)"
+    )
     write_outputs(
         names,
         matrix_values,
         args.matrix_path,
-        args.lower_threshold,
+        lower_threshold,
         args.upper_threshold,
         args.species_threshold,
         args.colour_palette,
