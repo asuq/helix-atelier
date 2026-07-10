@@ -95,10 +95,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--linkage",
         choices=["complete", "average"],
-        default="complete",
+        default="average",
         help=(
-            "Hierarchical linkage for ordering. Complete linkage is the strict "
-            "default; average linkage is exploratory."
+            "Hierarchical linkage for ordering. Average linkage is the default; "
+            "complete linkage enforces compact clusters."
         ),
     )
     args = parser.parse_args(argv)
@@ -579,7 +579,7 @@ def render_clustered_figure(
     upper_threshold: float,
     species_threshold: float,
     colour_palette: str,
-    linkage_method: str = "complete",
+    linkage_method: str = "average",
 ) -> None:
     """Render a clustered heatmap with aligned dendrograms."""
     colour_map = build_colormap(colour_palette)

@@ -52,7 +52,7 @@ class VisualiseANIMatrixTests(unittest.TestCase):
         self.assertEqual(args.upper_threshold, 100.0)
         self.assertEqual(args.species_threshold, 95.0)
         self.assertEqual(args.colour_palette, "Blues")
-        self.assertEqual(args.linkage, "complete")
+        self.assertEqual(args.linkage, "average")
 
     def test_static_mode_resolves_default_and_explicit_thresholds(self) -> None:
         matrix = np.array([[100.0, 92.5], [92.5, 100.0]])
@@ -227,7 +227,7 @@ class VisualiseANIMatrixTests(unittest.TestCase):
         self.assertNotIn("sample_00", svg_text)
         self.assertIn("95% ANI", svg_text)
 
-    def test_clustered_render_defaults_to_complete_linkage(self) -> None:
+    def test_clustered_render_defaults_to_average_linkage(self) -> None:
         names = ["A", "B", "C"]
         matrix = np.array(
             [
@@ -249,36 +249,36 @@ class VisualiseANIMatrixTests(unittest.TestCase):
                 100.0,
                 95.0,
                 "Blues",
-            )
-
-        self.assertEqual(linkage_mock.call_args.kwargs["method"], "complete")
-
-    def test_clustered_render_accepts_average_linkage(self) -> None:
-        names = ["A", "B", "C"]
-        matrix = np.array(
-            [
-                [100.0, 98.0, 91.0],
-                [98.0, 100.0, 92.0],
-                [91.0, 92.0, 100.0],
-            ]
-        )
-        with tempfile.TemporaryDirectory() as tempdir, mock.patch.object(
-            VISUALISER,
-            "linkage",
-            wraps=VISUALISER.linkage,
-        ) as linkage_mock:
-            VISUALISER.render_clustered_figure(
-                names,
-                matrix,
-                Path(tempdir) / "clustered.svg",
-                90.0,
-                100.0,
-                95.0,
-                "Blues",
-                "average",
             )
 
         self.assertEqual(linkage_mock.call_args.kwargs["method"], "average")
+
+    def test_clustered_render_accepts_complete_linkage(self) -> None:
+        names = ["A", "B", "C"]
+        matrix = np.array(
+            [
+                [100.0, 98.0, 91.0],
+                [98.0, 100.0, 92.0],
+                [91.0, 92.0, 100.0],
+            ]
+        )
+        with tempfile.TemporaryDirectory() as tempdir, mock.patch.object(
+            VISUALISER,
+            "linkage",
+            wraps=VISUALISER.linkage,
+        ) as linkage_mock:
+            VISUALISER.render_clustered_figure(
+                names,
+                matrix,
+                Path(tempdir) / "clustered.svg",
+                90.0,
+                100.0,
+                95.0,
+                "Blues",
+                "complete",
+            )
+
+        self.assertEqual(linkage_mock.call_args.kwargs["method"], "complete")
 
     def test_cli_writes_all_outputs_and_marks_species_reference(self) -> None:
         with tempfile.TemporaryDirectory() as tempdir:
