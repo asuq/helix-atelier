@@ -77,7 +77,7 @@ def test_parse_args_uses_requested_defaults() -> None:
     )
 
     assert args.threshold == 98.65
-    assert args.fig_format == "pdf"
+    assert args.fig_format == "svg"
     assert args.dpi == 300
     assert args.cluster_method == "average"
     assert args.label_mode == "compact"
@@ -290,8 +290,6 @@ def test_outputs_have_requested_schemas_and_directed_rows(
             str(three_taxon_mega),
             "--out-prefix",
             str(out_prefix),
-            "--fig-format",
-            "svg",
             "--annotate-values",
             "false",
         ]

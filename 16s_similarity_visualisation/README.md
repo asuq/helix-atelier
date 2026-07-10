@@ -50,7 +50,7 @@ uv run python make_16s_similarity_heatmap.py \
   --out-prefix results/16S_similarity \
   --threshold 98.65 \
   --label-mode compact \
-  --fig-format pdf
+  --fig-format svg
 ```
 
 Run `uv run python make_16s_similarity_heatmap.py --help` for all options.
@@ -77,7 +77,7 @@ For `--out-prefix results/16S_similarity`, the script writes:
   every pair.
 - `16S_similarity.clustered_order.txt`: original taxon identifiers in plotted
   order.
-- `16S_similarity.heatmap.pdf`: clustered heatmap in the selected format.
+- `16S_similarity.heatmap.svg`: clustered heatmap in the selected format.
 
 Threshold comparisons use unrounded values and are strictly below (`<`) the
 selected value. The cell grid is always black; when values are annotated,

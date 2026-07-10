@@ -91,8 +91,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--fig-format",
         choices=FIGURE_FORMATS,
-        default="pdf",
-        help="Heatmap format. Default: pdf.",
+        default="svg",
+        help="Heatmap format. Default: svg.",
     )
     parser.add_argument(
         "--dpi",
